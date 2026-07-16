@@ -1,0 +1,557 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#111827">
+<title>Who Am I? — Tilt Guessing Game</title>
+<style>
+  :root {
+    --bg: #111827;
+    --panel: #1f2937;
+    --accent: #6366f1;
+    --accent-2: #8b5cf6;
+    --text: #f9fafb;
+    --muted: #9ca3af;
+    --correct: #10b981;
+    --pass: #f59e0b;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body {
+    margin: 0; padding: 0; height: 100%; width: 100%;
+    background: var(--bg); color: var(--text);
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    overscroll-behavior: none; overflow: hidden;
+    -webkit-user-select: none; user-select: none;
+  }
+  #app { position: fixed; inset: 0; display: flex; }
+  .screen {
+    display: none; flex-direction: column; align-items: center; justify-content: safe center;
+    width: 100%; height: 100%; overflow-y: auto;
+    padding: max(20px, env(safe-area-inset-top)) 20px; text-align: center;
+  }
+  .screen.active { display: flex; }
+  h1 { font-size: clamp(28px, 8vw, 48px); margin: 0 0 8px; letter-spacing: -0.5px; }
+  .subtitle { color: var(--muted); font-size: 15px; margin: 0 0 24px; max-width: 520px; line-height: 1.5; }
+  .section-label { color: var(--muted); font-size: 13px; text-transform: uppercase; letter-spacing: 1px; margin: 18px 0 10px; }
+
+  .grid { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 12px; width: 100%; max-width: 440px; }
+  .card {
+    background: var(--panel); border: 2px solid transparent; border-radius: 14px;
+    padding: 18px 12px; font-size: 16px; font-weight: 600; cursor: pointer;
+    display: flex; flex-direction: column; align-items: center; gap: 6px; transition: border-color .15s, transform .1s;
+  }
+  .card .emoji { font-size: 28px; }
+  .card.selected { border-color: var(--accent); background: #262f45; }
+  .card:active { transform: scale(0.97); }
+
+  .chips { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+  .chip {
+    background: var(--panel); border: 2px solid transparent; border-radius: 999px;
+    padding: 10px 20px; font-size: 15px; font-weight: 600; cursor: pointer;
+  }
+  .chip.selected { border-color: var(--accent); background: #262f45; }
+
+  .btn {
+    margin-top: 26px; background: linear-gradient(135deg, var(--accent), var(--accent-2));
+    color: #fff; border: none; border-radius: 14px; padding: 16px 40px;
+    font-size: 19px; font-weight: 700; cursor: pointer; width: 100%; max-width: 440px;
+  }
+  .btn:active { transform: scale(0.98); }
+  .btn.secondary { background: var(--panel); margin-top: 12px; }
+
+  /* Get-ready */
+  #getready .big { font-size: clamp(80px, 30vw, 220px); font-weight: 800; line-height: 1; }
+  #getready .hint { color: var(--muted); font-size: 18px; margin-top: 20px; }
+
+  /* Play screen */
+  #play { padding: 0; justify-content: center; position: relative; }
+  #play .hud {
+    position: absolute; top: 0; left: 0; right: 0;
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 14px 20px; font-size: 20px; font-weight: 700; z-index: 3;
+  }
+  #play .hud .timer.low { color: var(--pass); }
+  #nameText {
+    font-size: clamp(40px, 13vw, 150px); font-weight: 800; line-height: 1.05;
+    padding: 0 24px; word-break: break-word; max-width: 100%;
+  }
+  #play .fallback {
+    position: absolute; bottom: 0; left: 0; right: 0; display: flex; z-index: 3;
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  #play .fallback button {
+    flex: 1; border: none; color: #fff; font-size: 18px; font-weight: 700;
+    padding: 18px 0; cursor: pointer;
+  }
+  #play .fallback .pass { background: rgba(245,158,11,0.85); }
+  #play .fallback .correct { background: rgba(16,185,129,0.85); }
+  #rotateHint {
+    position: absolute; top: 46px; left: 50%; transform: translateX(-50%); z-index: 2;
+    background: rgba(31,41,55,0.92); border-radius: 999px; padding: 8px 16px;
+    display: none; align-items: center; gap: 8px; pointer-events: none;
+    font-size: 14px; color: var(--muted); white-space: nowrap;
+  }
+  #rotateHint.show { display: flex; }
+  #rotateHint .rot { font-size: 20px; animation: spin 2s ease-in-out infinite; }
+  @keyframes spin { 0%,100% { transform: rotate(0); } 50% { transform: rotate(90deg); } }
+
+  /* Flash overlay */
+  #flash {
+    position: absolute; inset: 0; z-index: 4; display: none;
+    align-items: center; justify-content: center;
+    font-size: clamp(48px, 16vw, 160px); font-weight: 800; color: #fff;
+  }
+  #flash.show { display: flex; }
+  #flash.correct { background: var(--correct); }
+  #flash.pass { background: var(--pass); }
+
+  /* Results */
+  #results .score { font-size: clamp(60px, 20vw, 140px); font-weight: 800; color: var(--correct); line-height: 1; }
+  #results .score-label { color: var(--muted); margin-bottom: 20px; }
+  .reslist { width: 100%; max-width: 440px; text-align: left; overflow-y: auto; max-height: 34vh; margin-bottom: 8px; }
+  .reslist .row { display: flex; justify-content: space-between; padding: 8px 12px; border-radius: 8px; background: var(--panel); margin-bottom: 6px; }
+  .reslist .row .tag { font-size: 13px; font-weight: 700; }
+  .reslist .row .tag.got { color: var(--correct); }
+  .reslist .row .tag.missed { color: var(--pass); }
+  .footer-note { color: var(--muted); font-size: 12px; margin-top: 14px; max-width: 440px; line-height: 1.5; }
+</style>
+</head>
+<body>
+<div id="app">
+
+  <!-- HOME -->
+  <section id="home" class="screen active">
+    <h1>Who Am I?</h1>
+    <p class="subtitle">
+      Hold the phone flat on your forehead. Your friends can see the name — they answer your questions.
+      <br><strong>Tilt down</strong> when you guess it right, <strong>tilt up</strong> to pass.
+    </p>
+    <div class="section-label">Pick a category</div>
+    <div class="grid" id="categoryGrid"></div>
+    <div class="section-label">Round length</div>
+    <div class="chips" id="lengthChips"></div>
+    <button class="btn" id="startBtn">Start Game</button>
+  </section>
+
+  <!-- GET READY -->
+  <section id="getready" class="screen">
+    <div class="hint">Put the phone on your forehead!</div>
+    <div class="big" id="readyCount">3</div>
+    <div class="hint" id="readySub">Rotate to landscape</div>
+  </section>
+
+  <!-- PLAY -->
+  <section id="play" class="screen">
+    <div class="hud">
+      <div class="score">Score: <span id="scoreVal">0</span></div>
+      <div class="timer" id="timerVal">60</div>
+    </div>
+    <div id="nameText">—</div>
+    <div class="fallback">
+      <button class="pass" id="passBtn">Pass ↑</button>
+      <button class="correct" id="correctBtn">Correct ↓</button>
+    </div>
+    <div id="flash"></div>
+    <div id="rotateHint"><span class="rot">📱</span><span>Turn sideways for the best fit</span></div>
+  </section>
+
+  <!-- RESULTS -->
+  <section id="results" class="screen">
+    <div class="score" id="finalScore">0</div>
+    <div class="score-label">correct this round</div>
+    <div class="reslist" id="resList"></div>
+    <button class="btn" id="againBtn">Play Again</button>
+    <button class="btn secondary" id="changeBtn">Change Category</button>
+    <div class="footer-note">
+      Tip: for the tilt controls to work, your phone needs motion access. On iPhone, tap “Allow” when
+      prompted. If tilting doesn’t respond, use the on-screen Pass / Correct buttons.
+    </div>
+  </section>
+
+</div>
+
+<script>
+"use strict";
+
+/* ------------------------------------------------------------------ *
+ * Name sets
+ * ------------------------------------------------------------------ */
+const CATEGORIES = {
+  cartoon: {
+    label: "Cartoon Characters", emoji: "🧑‍🎨",
+    names: [
+      "Bugs Bunny","SpongeBob SquarePants","Homer Simpson","Scooby-Doo","Pikachu","Mickey Mouse",
+      "Bart Simpson","Tom Cat","Daffy Duck","Fred Flintstone","Shaggy","Popeye",
+      "Peter Griffin","Rick Sanchez","Morty Smith","Patrick Star","Squidward","Donald Duck",
+      "Goofy","Charlie Brown","Snoopy","Woody Woodpecker","Dora the Explorer","Tweety Bird",
+      "Winnie the Pooh","Tigger","Buzz Lightyear","Woody","Elsa","Shrek",
+      "Sandy Cheeks","Bender","Stewie Griffin","Johnny Bravo","Dexter","Courage the Cowardly Dog",
+      "The Powerpuff Girls","Optimus Prime","He-Man","Garfield"
+    ]
+  },
+  superheroes: {
+    label: "Superheroes", emoji: "🦸",
+    names: [
+      "Spider-Man","Batman","Superman","Wonder Woman","Iron Man","Captain America",
+      "The Hulk","Thor","Black Panther","Black Widow","Doctor Strange","Wolverine",
+      "Deadpool","Flash","Aquaman","Green Lantern","Captain Marvel","Ant-Man",
+      "Hawkeye","Scarlet Witch","Vision","Green Arrow","Cyclops","Storm",
+      "Nightcrawler","Green Goblin","The Joker","Harley Quinn","Thanos","Loki",
+      "Magneto","Professor X","Robin","Catwoman","Groot","Star-Lord",
+      "Gamora","Nick Fury","Daredevil","The Thing"
+    ]
+  },
+  animals: {
+    label: "Animals", emoji: "🐘",
+    names: [
+      "Elephant","Penguin","Kangaroo","Octopus","Giraffe","Lion",
+      "Tiger","Panda","Koala","Sloth","Dolphin","Shark",
+      "Crocodile","Hedgehog","Owl","Flamingo","Chameleon","Platypus",
+      "Cheetah","Gorilla","Hippopotamus","Rhinoceros","Zebra","Camel",
+      "Peacock","Jellyfish","Seahorse","Narwhal","Meerkat","Chimpanzee",
+      "Polar Bear","Walrus","Toucan","Armadillo","Porcupine","Raccoon",
+      "Otter","Bat","Sea Turtle","Wolf"
+    ]
+  },
+  famous: {
+    label: "Famous People", emoji: "⭐",
+    names: [
+      "Albert Einstein","Beyoncé","Barack Obama","Taylor Swift","Leonardo da Vinci","William Shakespeare",
+      "Cristiano Ronaldo","Lionel Messi","Oprah Winfrey","Elvis Presley","Michael Jackson","Queen Elizabeth II",
+      "Nelson Mandela","Marie Curie","Isaac Newton","Charlie Chaplin","Muhammad Ali","Steve Jobs",
+      "Bill Gates","Elon Musk","Ariana Grande","Adele","Ed Sheeran","Serena Williams",
+      "Usain Bolt","Mahatma Gandhi","Abraham Lincoln","Napoleon Bonaparte","Cleopatra","Frida Kahlo",
+      "Vincent van Gogh","Mozart","Beethoven","Walt Disney","Stephen Hawking","David Attenborough",
+      "Emma Watson","Dwayne Johnson","Keanu Reeves","Rihanna"
+    ]
+  }
+};
+
+/* ------------------------------------------------------------------ *
+ * Pure tilt-decision logic (unit-testable, no DOM)
+ *
+ * State machine with a neutral dead-zone + latch so ONE physical
+ * tilt produces exactly ONE trigger. Caller feeds the "front/back"
+ * tilt angle (degrees, 0 = flat vertical / held to forehead).
+ *   - value >  triggerAngle  -> "correct" (tilted down toward ground)
+ *   - value < -triggerAngle  -> "pass"    (tilted up toward sky)
+ * After a trigger the machine is latched until value returns within
+ * neutralAngle of 0.
+ * ------------------------------------------------------------------ */
+function createTiltDetector(opts) {
+  opts = opts || {};
+  const triggerAngle = opts.triggerAngle != null ? opts.triggerAngle : 45;
+  const neutralAngle = opts.neutralAngle != null ? opts.neutralAngle : 20;
+  let latched = false; // true while waiting to return to neutral
+
+  return {
+    /** feed an angle, returns "correct" | "pass" | null */
+    update(angle) {
+      if (latched) {
+        if (Math.abs(angle) < neutralAngle) latched = false;
+        return null;
+      }
+      if (angle > triggerAngle) { latched = true; return "correct"; }
+      if (angle < -triggerAngle) { latched = true; return "pass"; }
+      return null;
+    },
+    reset() { latched = false; },
+    _state() { return { latched }; }
+  };
+}
+
+// Expose for console testing
+window.__createTiltDetector = createTiltDetector;
+
+/* ------------------------------------------------------------------ *
+ * Game state + helpers
+ * ------------------------------------------------------------------ */
+const state = {
+  category: "cartoon",
+  roundLength: 60,
+  deck: [],
+  current: null,
+  score: 0,
+  results: [],       // { name, got: bool }
+  timeLeft: 60,
+  timerId: null,
+  running: false,
+  detector: null,
+  motionAttached: false,
+  wakeLock: null,
+  busy: false        // during flash animation
+};
+
+function shuffle(arr) {
+  const a = arr.slice();
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+function nextName() {
+  if (state.deck.length === 0) state.deck = shuffle(CATEGORIES[state.category].names);
+  state.current = state.deck.pop();
+  return state.current;
+}
+
+/* ------------------------------------------------------------------ *
+ * Screen switching
+ * ------------------------------------------------------------------ */
+function show(id) {
+  document.querySelectorAll(".screen").forEach(s => s.classList.remove("active"));
+  document.getElementById(id).classList.add("active");
+}
+
+/* ------------------------------------------------------------------ *
+ * Home screen setup
+ * ------------------------------------------------------------------ */
+const categoryGrid = document.getElementById("categoryGrid");
+Object.keys(CATEGORIES).forEach(key => {
+  const c = CATEGORIES[key];
+  const div = document.createElement("div");
+  div.className = "card" + (key === state.category ? " selected" : "");
+  div.dataset.key = key;
+  div.innerHTML = `<span class="emoji">${c.emoji}</span><span>${c.label}</span>`;
+  div.addEventListener("click", () => {
+    state.category = key;
+    document.querySelectorAll("#categoryGrid .card").forEach(el => el.classList.remove("selected"));
+    div.classList.add("selected");
+  });
+  categoryGrid.appendChild(div);
+});
+
+const lengthChips = document.getElementById("lengthChips");
+[30, 60, 90].forEach(sec => {
+  const chip = document.createElement("div");
+  chip.className = "chip" + (sec === state.roundLength ? " selected" : "");
+  chip.textContent = sec + "s";
+  chip.addEventListener("click", () => {
+    state.roundLength = sec;
+    document.querySelectorAll("#lengthChips .chip").forEach(el => el.classList.remove("selected"));
+    chip.classList.add("selected");
+  });
+  lengthChips.appendChild(chip);
+});
+
+/* ------------------------------------------------------------------ *
+ * Motion permission + listener
+ * ------------------------------------------------------------------ */
+async function requestMotion() {
+  try {
+    if (typeof DeviceOrientationEvent !== "undefined" &&
+        typeof DeviceOrientationEvent.requestPermission === "function") {
+      const res = await DeviceOrientationEvent.requestPermission();
+      return res === "granted";
+    }
+    // Non-iOS: assume available if the API exists
+    return typeof DeviceOrientationEvent !== "undefined";
+  } catch (e) {
+    return false;
+  }
+}
+
+function currentTiltAngle(ev) {
+  // When held to forehead in landscape, the front/back rotation shows up
+  // primarily on gamma. Pick whichever axis has the larger magnitude so the
+  // control works regardless of which way the phone was rotated into landscape.
+  const beta = ev.beta || 0;   // front-back in portrait
+  const gamma = ev.gamma || 0; // left-right in portrait
+  const landscape = Math.abs(window.orientation) === 90 ||
+                    (window.matchMedia && window.matchMedia("(orientation: landscape)").matches);
+  let angle = landscape ? gamma : beta;
+  // Normalise sign so that "tilt top edge down toward ground" is positive.
+  if (landscape && window.orientation === -90) angle = -angle;
+  return angle;
+}
+
+function onOrientation(ev) {
+  if (!state.running || state.busy || !state.detector) return;
+  const angle = currentTiltAngle(ev);
+  const result = state.detector.update(angle);
+  if (result === "correct") registerAnswer(true);
+  else if (result === "pass") registerAnswer(false);
+}
+
+function attachMotion() {
+  if (state.motionAttached) return;
+  window.addEventListener("deviceorientation", onOrientation, true);
+  state.motionAttached = true;
+}
+
+/* ------------------------------------------------------------------ *
+ * Wake lock (best effort)
+ * ------------------------------------------------------------------ */
+async function requestWakeLock() {
+  try {
+    if ("wakeLock" in navigator) state.wakeLock = await navigator.wakeLock.request("screen");
+  } catch (e) { /* ignore */ }
+}
+function releaseWakeLock() {
+  try { if (state.wakeLock) { state.wakeLock.release(); state.wakeLock = null; } } catch (e) {}
+}
+
+/* ------------------------------------------------------------------ *
+ * Landscape hint
+ * ------------------------------------------------------------------ */
+function isLandscape() {
+  return (window.matchMedia && window.matchMedia("(orientation: landscape)").matches) ||
+         Math.abs(window.orientation) === 90;
+}
+function updateRotateHint() {
+  const hint = document.getElementById("rotateHint");
+  if (state.running && !isLandscape()) hint.classList.add("show");
+  else hint.classList.remove("show");
+}
+window.addEventListener("resize", updateRotateHint);
+window.addEventListener("orientationchange", updateRotateHint);
+
+/* ------------------------------------------------------------------ *
+ * Start flow
+ * ------------------------------------------------------------------ */
+document.getElementById("startBtn").addEventListener("click", async () => {
+  // Request motion permission from within this user gesture (needed on iOS)
+  const granted = await requestMotion();
+  if (granted) attachMotion();
+
+  // Best effort: lock to landscape
+  try {
+    if (screen.orientation && screen.orientation.lock) {
+      await screen.orientation.lock("landscape");
+    }
+  } catch (e) { /* unsupported (e.g. iOS Safari) — rotate hint handles it */ }
+
+  await requestWakeLock();
+  startGetReady();
+});
+
+function startGetReady() {
+  show("getready");
+  const countEl = document.getElementById("readyCount");
+  const subEl = document.getElementById("readySub");
+  let n = 3;
+  countEl.textContent = n;
+  subEl.textContent = isLandscape() ? "Get ready…" : "Turn your phone sideways";
+  const iv = setInterval(() => {
+    n--;
+    subEl.textContent = isLandscape() ? "Get ready…" : "Turn your phone sideways";
+    if (n <= 0) {
+      clearInterval(iv);
+      startRound();
+    } else {
+      countEl.textContent = n;
+    }
+  }, 1000);
+}
+
+/* ------------------------------------------------------------------ *
+ * Round
+ * ------------------------------------------------------------------ */
+function startRound() {
+  state.deck = shuffle(CATEGORIES[state.category].names);
+  state.score = 0;
+  state.results = [];
+  state.timeLeft = state.roundLength;
+  state.running = true;
+  state.busy = false;
+  state.detector = createTiltDetector({ triggerAngle: 45, neutralAngle: 20 });
+
+  document.getElementById("scoreVal").textContent = "0";
+  const timerEl = document.getElementById("timerVal");
+  timerEl.textContent = state.timeLeft;
+  timerEl.classList.remove("low");
+
+  show("play");
+  updateRotateHint();
+  showName(nextName());
+
+  state.timerId = setInterval(() => {
+    state.timeLeft--;
+    timerEl.textContent = state.timeLeft;
+    if (state.timeLeft <= 10) timerEl.classList.add("low");
+    if (state.timeLeft <= 0) endRound();
+  }, 1000);
+}
+
+function showName(name) {
+  document.getElementById("nameText").textContent = name;
+}
+
+function registerAnswer(got) {
+  if (!state.running || state.busy) return;
+  state.busy = true;
+  state.results.push({ name: state.current, got });
+  if (got) {
+    state.score++;
+    document.getElementById("scoreVal").textContent = state.score;
+  }
+  flash(got ? "correct" : "pass", got ? "Correct!" : "Pass", () => {
+    state.busy = false;
+    if (state.running) showName(nextName());
+  });
+}
+
+function flash(kind, text, done) {
+  const el = document.getElementById("flash");
+  el.className = "";
+  el.textContent = text;
+  el.classList.add(kind, "show");
+  setTimeout(() => {
+    el.classList.remove("show");
+    done && done();
+  }, 700);
+}
+
+function endRound() {
+  clearInterval(state.timerId);
+  state.timerId = null;
+  state.running = false;
+  document.getElementById("rotateHint").classList.remove("show");
+  releaseWakeLock();
+  renderResults();
+  show("results");
+}
+
+/* ------------------------------------------------------------------ *
+ * Results
+ * ------------------------------------------------------------------ */
+function renderResults() {
+  document.getElementById("finalScore").textContent = state.score;
+  const list = document.getElementById("resList");
+  list.innerHTML = "";
+  if (state.results.length === 0) {
+    list.innerHTML = '<div class="row"><span>No names this round</span></div>';
+    return;
+  }
+  state.results.forEach(r => {
+    const row = document.createElement("div");
+    row.className = "row";
+    row.innerHTML = `<span>${r.name}</span><span class="tag ${r.got ? "got" : "missed"}">${r.got ? "✓ Got it" : "Passed"}</span>`;
+    list.appendChild(row);
+  });
+}
+
+document.getElementById("againBtn").addEventListener("click", async () => {
+  await requestWakeLock();
+  startGetReady();
+});
+document.getElementById("changeBtn").addEventListener("click", () => {
+  show("home");
+});
+
+/* ------------------------------------------------------------------ *
+ * On-screen fallback buttons
+ * ------------------------------------------------------------------ */
+document.getElementById("correctBtn").addEventListener("click", () => registerAnswer(true));
+document.getElementById("passBtn").addEventListener("click", () => registerAnswer(false));
+
+// Re-acquire wake lock if page becomes visible again mid-round
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible" && state.running) requestWakeLock();
+});
+</script>
+</body>
+</html>
