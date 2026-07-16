@@ -72,6 +72,12 @@
     padding: 14px 20px; font-size: 20px; font-weight: 700; z-index: 3;
   }
   #play .hud .timer.low { color: var(--pass); }
+  #endBtn {
+    display: none; background: var(--panel); color: var(--text);
+    border: none; border-radius: 999px; padding: 8px 18px;
+    font-size: 15px; font-weight: 700; cursor: pointer;
+  }
+  #endBtn:active { transform: scale(0.96); }
   #nameText {
     font-size: clamp(40px, 13vw, 150px); font-weight: 800; line-height: 1.05;
     padding: 0 24px; word-break: break-word; max-width: 100%;
@@ -145,6 +151,7 @@
   <section id="play" class="screen">
     <div class="hud">
       <div class="score">Score: <span id="scoreVal">0</span></div>
+      <button id="endBtn">End ✓</button>
       <div class="timer" id="timerVal">60</div>
     </div>
     <div id="nameText">—</div>
@@ -224,6 +231,30 @@ const CATEGORIES = {
       "Usain Bolt","Mahatma Gandhi","Abraham Lincoln","Napoleon Bonaparte","Cleopatra","Frida Kahlo",
       "Vincent van Gogh","Mozart","Beethoven","Walt Disney","Stephen Hawking","David Attenborough",
       "Emma Watson","Dwayne Johnson","Keanu Reeves","Rihanna"
+    ]
+  },
+  countries: {
+    label: "Countries", emoji: "🌍",
+    names: [
+      "France","Japan","Brazil","Canada","Egypt","Australia",
+      "India","Italy","Mexico","Germany","Spain","China",
+      "Kenya","Norway","Greece","Thailand","Argentina","Iceland",
+      "Portugal","Turkey","Vietnam","Peru","Ireland","Morocco",
+      "Sweden","Switzerland","Netherlands","New Zealand","South Africa","South Korea",
+      "Indonesia","Nigeria","Poland","Chile","Cuba","Jamaica",
+      "Finland","Russia","Saudi Arabia","United States"
+    ]
+  },
+  villains: {
+    label: "Villains", emoji: "😈",
+    names: [
+      "Darth Vader","Voldemort","The Joker","Sauron","Maleficent","Scar",
+      "Cruella de Vil","Ursula","Jafar","Hannibal Lecter","Gollum","Bowser",
+      "Thanos","Loki","Freddy Krueger","Dracula","The Grinch","Captain Hook",
+      "Cersei Lannister","Gru","Lord Farquaad","Hades","Emperor Palpatine","Magneto",
+      "Bane","Green Goblin","Gargamel","Mr. Freeze","Poison Ivy","Two-Face",
+      "The Terminator","Agent Smith","Hela","Ultron","Shere Khan","Jack Torrance",
+      "Norman Bates","Pennywise","Michael Myers","Saruman"
     ]
   }
 };
@@ -325,10 +356,10 @@ Object.keys(CATEGORIES).forEach(key => {
 });
 
 const lengthChips = document.getElementById("lengthChips");
-[30, 60, 90].forEach(sec => {
+[30, 60, 90, 0].forEach(sec => {
   const chip = document.createElement("div");
   chip.className = "chip" + (sec === state.roundLength ? " selected" : "");
-  chip.textContent = sec + "s";
+  chip.textContent = sec === 0 ? "∞ No limit" : sec + "s";
   chip.addEventListener("click", () => {
     state.roundLength = sec;
     document.querySelectorAll("#lengthChips .chip").forEach(el => el.classList.remove("selected"));
@@ -461,19 +492,26 @@ function startRound() {
 
   document.getElementById("scoreVal").textContent = "0";
   const timerEl = document.getElementById("timerVal");
-  timerEl.textContent = state.timeLeft;
+  const endBtn = document.getElementById("endBtn");
   timerEl.classList.remove("low");
+
+  const noLimit = state.roundLength === 0;
+  timerEl.textContent = noLimit ? "∞" : state.timeLeft;
+  endBtn.style.display = noLimit ? "block" : "none";
 
   show("play");
   updateRotateHint();
   showName(nextName());
 
-  state.timerId = setInterval(() => {
-    state.timeLeft--;
-    timerEl.textContent = state.timeLeft;
-    if (state.timeLeft <= 10) timerEl.classList.add("low");
-    if (state.timeLeft <= 0) endRound();
-  }, 1000);
+  state.timerId = null;
+  if (!noLimit) {
+    state.timerId = setInterval(() => {
+      state.timeLeft--;
+      timerEl.textContent = state.timeLeft;
+      if (state.timeLeft <= 10) timerEl.classList.add("low");
+      if (state.timeLeft <= 0) endRound();
+    }, 1000);
+  }
 }
 
 function showName(name) {
@@ -547,6 +585,7 @@ document.getElementById("changeBtn").addEventListener("click", () => {
  * ------------------------------------------------------------------ */
 document.getElementById("correctBtn").addEventListener("click", () => registerAnswer(true));
 document.getElementById("passBtn").addEventListener("click", () => registerAnswer(false));
+document.getElementById("endBtn").addEventListener("click", () => { if (state.running) endRound(); });
 
 // Re-acquire wake lock if page becomes visible again mid-round
 document.addEventListener("visibilitychange", () => {
